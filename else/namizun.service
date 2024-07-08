@@ -1,11 +1,13 @@
 [Unit]
-Description=Namizun service,Asymmetric upload and download
+Description=Namizun service, Asymmetric upload and download
+After=network.target
 
 [Service]
+Type=simple
 WorkingDirectory=/var/www/namizun
-Environment=PYTHONPATH=/var/www/namizun
-ExecStart=/var/www/namizun/venv/bin/python3 uploader.py
+ExecStart=/var/www/namizun/venv/bin/python3 /var/www/namizun/uploader.py
 Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
