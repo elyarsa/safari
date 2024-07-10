@@ -2,7 +2,7 @@ import logging
 import sys
 from namizun_core import database
 from random import uniform, randint
-from time import sleep
+from time import sleep, time
 from namizun_core.network import get_network_io, get_system_network_io
 from namizun_core.udp import multi_tcp_uploader  # Correct import from udp module
 from namizun_core.ip import cache_ip_ports_from_database
@@ -68,6 +68,10 @@ def get_uploader_count_base_timeline():
 store_restart_namizun_uploader_log()
 logging.info("Initialized Namizun uploader...")
 
+last_upload_check_time = time()
+upload_check_interval = 60  # Check every 60 seconds
+minimum_upload_activity = 1000  # Minimum bytes to consider as active upload
+
 try:
     while True:
         logging.info("Entering main loop...")
@@ -103,6 +107,16 @@ try:
                     remain_uploader -= uploader_count
                 remain_upload_size -= uploader_count * upload_size_for_each_ip
                 logging.info(f"remain_uploader: {remain_uploader}, remain_upload_size: {remain_upload_size}")
+
+                # Watchdog check
+                current_time = time()
+                if current_time - last_upload_check_time > upload_check_interval:
+                    new_upload_amount = get_network_io()[0]
+                    if new_upload_amount - database.get_cache_parameter('total_upload_cache') < minimum_upload_activity:
+                        logging.error("Upload has stopped, exiting...")
+                        sys.exit(1)  # Exit with an error to trigger systemd restart
+                    last_upload_check_time = current_time
+
         sleep_duration = randint(5, 30)
         logging.info(f"Sleeping for {sleep_duration} seconds...")
         sleep(sleep_duration)
