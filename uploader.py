@@ -1,10 +1,10 @@
 import logging
 import sys
 from namizun_core import database
-from random import uniform, randint
+from random import uniform, randint, choice
 from time import sleep, time
 from namizun_core.network import get_network_io, get_system_network_io
-from namizun_core.udp import multi_tcp_uploader  # Correct import from udp module
+from namizun_core.udp import multi_tcp_uploader
 from namizun_core.ip import cache_ip_ports_from_database
 from namizun_core.time import get_now_hour
 from namizun_core.log import store_restart_namizun_uploader_log, store_new_upload_loop_log
@@ -16,54 +16,70 @@ logging.info("Starting uploader.py...")
 
 def ensure_fake_tcp_uploader_running():
     logging.info("Setting fake_tcp_uploader_running to True...")
-    database.set_parameter('fake_tcp_uploader_running', True)
-    value = database.get_cache_parameter('fake_tcp_uploader_running')
-    logging.info(f"fake_tcp_uploader_running after setting: {value}")
+    try:
+        database.set_parameter('fake_tcp_uploader_running', True)
+        value = database.get_cache_parameter('fake_tcp_uploader_running')
+        logging.info(f"fake_tcp_uploader_running after setting: {value}")
+    except Exception as e:
+        logging.error(f"Error in ensure_fake_tcp_uploader_running: {e}")
+        sys.exit(1)
 
 ensure_fake_tcp_uploader_running()
 
 def reboot_finder():
     logging.info("Running reboot_finder...")
-    new_upload_amount, new_download_amount = get_network_io()
-    cached_download_amount = database.get_cache_parameter('total_download_cache')
-    cached_upload_amount = database.get_cache_parameter('total_upload_cache')
-    logging.info(f"new_upload_amount: {new_upload_amount}, new_download_amount: {new_download_amount}")
-    logging.info(f"cached_download_amount: {cached_download_amount}, cached_upload_amount: {cached_upload_amount}")
-    if new_upload_amount >= cached_upload_amount and new_download_amount >= cached_download_amount:
-        database.set_parameter('total_download_cache', new_download_amount)
-        database.set_parameter('total_upload_cache', new_upload_amount)
-    else:
-        system_upload_amount, system_download_amount = get_system_network_io()
-        database.set_parameter('download_amount_synchronizer', (cached_download_amount - system_download_amount))
-        database.set_parameter('upload_amount_synchronizer', (cached_upload_amount - system_upload_amount))
-        new_upload_amount = cached_upload_amount
-        new_download_amount = cached_download_amount
-    logging.info(f"Updated upload_amount: {new_upload_amount}, download_amount: {new_download_amount}")
-    return new_upload_amount, new_download_amount
+    try:
+        new_upload_amount, new_download_amount = get_network_io()
+        cached_download_amount = database.get_cache_parameter('total_download_cache')
+        cached_upload_amount = database.get_cache_parameter('total_upload_cache')
+        logging.info(f"new_upload_amount: {new_upload_amount}, new_download_amount: {new_download_amount}")
+        logging.info(f"cached_download_amount: {cached_download_amount}, cached_upload_amount: {cached_upload_amount}")
+        if new_upload_amount >= cached_upload_amount and new_download_amount >= cached_download_amount:
+            database.set_parameter('total_download_cache', new_download_amount)
+            database.set_parameter('total_upload_cache', new_upload_amount)
+        else:
+            system_upload_amount, system_download_amount = get_system_network_io()
+            database.set_parameter('download_amount_synchronizer', (cached_download_amount - system_download_amount))
+            database.set_parameter('upload_amount_synchronizer', (cached_upload_amount - system_upload_amount))
+            new_upload_amount = cached_upload_amount
+            new_download_amount = cached_download_amount
+        logging.info(f"Updated upload_amount: {new_upload_amount}, download_amount: {new_download_amount}")
+        return new_upload_amount, new_download_amount
+    except Exception as e:
+        logging.error(f"Error in reboot_finder: {e}")
+        sys.exit(1)
 
 def get_network_usage():
     logging.info("Running get_network_usage...")
-    upload, download = reboot_finder()
-    limitation = int(uniform(database.get_cache_parameter('coefficient_limitation') * 0.7,
-                             database.get_cache_parameter('coefficient_limitation') * 1.3))
-    difference = download * limitation - upload
-    logging.info(f"upload: {upload}, download: {download}, limitation: {limitation}, difference: {difference}")
-    if difference < 1000000000:
-        return 0
-    return difference
+    try:
+        upload, download = reboot_finder()
+        limitation = int(uniform(database.get_cache_parameter('coefficient_limitation') * 0.7,
+                                 database.get_cache_parameter('coefficient_limitation') * 1.3))
+        difference = download * limitation - upload
+        logging.info(f"upload: {upload}, download: {download}, limitation: {limitation}, difference: {difference}")
+        if difference < 1000000000:
+            return 0
+        return difference
+    except Exception as e:
+        logging.error(f"Error in get_network_usage: {e}")
+        sys.exit(1)
 
 def get_uploader_count_base_timeline():
     logging.info("Running get_uploader_count_base_timeline...")
-    time_in_iran = int(get_now_hour())
-    default_uploader_count = database.get_cache_parameter('coefficient_uploader_threads_count') * 10
-    maximum_allowed_coefficient = [2, 1.6, 1, 0.6, 0.2, 0.1, 0.6, 1, 1.2, 1.3, 1.4, 1.5,
-                                   1.3, 1.4, 1.6, 1.5, 1.3, 1.5, 1.7, 1.8, 2, 1.3, 1.5, 1.8]
-    minimum_allowed_coefficient = [1.6, 1, 0.6, 0.2, 0, 0, 0.2, 0.8, 1, 1.1, 1.2, 1.3,
-                                   1.1, 1.2, 1.5, 1.4, 1.2, 1.4, 1.5, 1.6, 1.8, 1, 1.2, 1.5]
-    uploader_count = int(uniform(minimum_allowed_coefficient[time_in_iran] * default_uploader_count,
-                                 maximum_allowed_coefficient[time_in_iran] * default_uploader_count))
-    logging.info(f"time_in_iran: {time_in_iran}, uploader_count: {uploader_count}")
-    return uploader_count
+    try:
+        time_in_iran = int(get_now_hour())
+        default_uploader_count = database.get_cache_parameter('coefficient_uploader_threads_count') * 10
+        maximum_allowed_coefficient = [2, 1.6, 1, 0.6, 0.2, 0.1, 0.6, 1, 1.2, 1.3, 1.4, 1.5,
+                                       1.3, 1.4, 1.6, 1.5, 1.3, 1.5, 1.7, 1.8, 2, 1.3, 1.5, 1.8]
+        minimum_allowed_coefficient = [1.6, 1, 0.6, 0.2, 0, 0, 0.2, 0.8, 1, 1.1, 1.2, 1.3,
+                                       1.1, 1.2, 1.5, 1.4, 1.2, 1.4, 1.5, 1.6, 1.8, 1, 1.2, 1.5]
+        uploader_count = int(uniform(minimum_allowed_coefficient[time_in_iran] * default_uploader_count,
+                                     maximum_allowed_coefficient[time_in_iran] * default_uploader_count))
+        logging.info(f"time_in_iran: {time_in_iran}, uploader_count: {uploader_count}")
+        return uploader_count
+    except Exception as e:
+        logging.error(f"Error in get_uploader_count_base_timeline: {e}")
+        sys.exit(1)
 
 store_restart_namizun_uploader_log()
 logging.info("Initialized Namizun uploader...")
@@ -71,6 +87,25 @@ logging.info("Initialized Namizun uploader...")
 last_upload_check_time = time()
 upload_check_interval = 60  # Check every 60 seconds
 minimum_upload_activity = 1000  # Minimum bytes to consider as active upload
+
+total_uploaded = 0  # Track total uploaded data
+
+def simulate_natural_traffic():
+    """Simulate random network traffic patterns"""
+    patterns = ["low", "medium", "high"]
+    pattern = choice(patterns)
+    
+    if pattern == "low":
+        duration = randint(5, 15)  # Low traffic period
+        speed_factor = uniform(0.1, 0.5)  # Low speed
+    elif pattern == "medium":
+        duration = randint(10, 30)  # Medium traffic period
+        speed_factor = uniform(0.5, 0.8)  # Medium speed
+    else:  # High
+        duration = randint(20, 40)  # High traffic period
+        speed_factor = uniform(0.8, 1.0)  # High speed
+
+    return duration, speed_factor
 
 try:
     while True:
@@ -108,6 +143,9 @@ try:
                 remain_upload_size -= uploader_count * upload_size_for_each_ip
                 logging.info(f"remain_uploader: {remain_uploader}, remain_upload_size: {remain_upload_size}")
 
+                # Add to total uploaded
+                total_uploaded += uploader_count * upload_size_for_each_ip
+
                 # Watchdog check
                 current_time = time()
                 if current_time - last_upload_check_time > upload_check_interval:
@@ -117,9 +155,17 @@ try:
                         sys.exit(1)  # Exit with an error to trigger systemd restart
                     last_upload_check_time = current_time
 
+                # Simulate natural traffic pattern
+                duration, speed_factor = simulate_natural_traffic()
+                sleep(duration)
+                remain_upload_size *= speed_factor
+
         sleep_duration = randint(5, 30)
         logging.info(f"Sleeping for {sleep_duration} seconds...")
         sleep(sleep_duration)
+
+        # Log the total uploaded so far
+        logging.info(f"Total uploaded so far: {total_uploaded / (1024 * 1024)} MB")
 
 except Exception as e:
     logging.error(f"An error occurred: {e}")
