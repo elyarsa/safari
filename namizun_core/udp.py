@@ -1,10 +1,10 @@
-import socket
 import logging
-from threading import Thread
+import socket
 from random import uniform, choices, randint
+from threading import Thread
 from time import sleep
 from namizun_core import database
-from namizun_core.log import store_new_tcp_uploader_log, store_new_upload_agent_log
+from namizun_core.log import store_new_upload_agent_log, store_new_tcp_uploader_log
 from namizun_core.time import get_now_time
 
 buffer_ranges = [5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000, 50000, 55000, 60000, 65000]
@@ -23,49 +23,29 @@ def get_ip_with_fixed_port():
     return target_ip, game_port
 
 def start_tcp_uploader():
-    max_retries = 5
-    retries = 0
-    while retries < max_retries:
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            target_ip, game_port = get_ip_with_fixed_port()
-            sock.settimeout(10)  # Set a timeout for socket operations
-            sock.connect((target_ip, game_port))
-            remain_upload_size = upload_size = int(uniform(total_upload_size_for_each_ip * 0.7, total_upload_size_for_each_ip * 1.2))
-            started_time = get_now_time()
-            logging.info(f"Uploader started for {target_ip}:{game_port} with initial upload size {upload_size}")
-            while remain_upload_size >= 0:
-                selected_buffer_range = choices(buffer_ranges, database.buffers_weight, k=1)[0]
-                buf = int(uniform(selected_buffer_range - 5000, selected_buffer_range))
-                try:
-                    if sock.send(bytes(buf)):
-                        remain_upload_size -= buf
-                        sleep(0.001 * int(uniform(5, 26)) / database.get_cache_parameter('coefficient_buffer_sending_speed'))
-                except (BrokenPipeError, ConnectionResetError, socket.timeout) as e:
-                    logging.error(f"{e.__class__.__name__}: Failed to send data to {target_ip}:{game_port}")
-                    retries += 1
-                    sleep(2 ** retries)  # Exponential backoff
-                    break
-                except Exception as e:
-                    logging.error(f"Exception in start_tcp_uploader (inner loop): {e}")
-                    retries += 1
-                    sleep(2 ** retries)  # Exponential backoff
-                    break
-            sock.close()
-            store_new_tcp_uploader_log(started_time, target_ip, game_port, upload_size, get_now_time())
-            if retries < max_retries:
-                logging.info(f"Upload completed for {target_ip}:{game_port} with {remain_upload_size} bytes remaining.")
-            return  # Exit the function after successful upload
-        except (ConnectionResetError, socket.timeout) as e:
-            logging.error(f"{e.__class__.__name__}: {e} on attempt {retries + 1}")
-            retries += 1
-            sleep(2 ** retries)  # Exponential backoff
-        except Exception as e:
-            logging.error(f"Exception in start_tcp_uploader (outer loop): {e} on attempt {retries + 1}")
-            retries += 1
-            sleep(2 ** retries)  # Exponential backoff
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        target_ip, game_port = get_ip_with_fixed_port()
+        sock.connect((target_ip, game_port))
+        remain_upload_size = upload_size = int(uniform(total_upload_size_for_each_ip * 0.7, total_upload_size_for_each_ip * 1.2))
+        started_time = get_now_time()
 
-    logging.error(f"Max retries reached for {target_ip}:{game_port}, exiting start_tcp_uploader")
+        while remain_upload_size >= 0:
+            selected_buffer_range = choices(buffer_ranges, database.buffers_weight, k=1)[0]
+            buf = int(uniform(selected_buffer_range - 5000, selected_buffer_range))
+            try:
+                if sock.send(bytes(buf)):
+                    remain_upload_size -= buf
+                    sleep(0.001 * int(uniform(5, 26)) / database.get_cache_parameter('coefficient_buffer_sending_speed'))
+            except (BrokenPipeError, ConnectionResetError) as e:
+                logging.error(f"{type(e).__name__}: Failed to send data to {target_ip}:{game_port}")
+                break
+
+        sock.close()
+        store_new_tcp_uploader_log(started_time, target_ip, game_port, upload_size, get_now_time())
+
+    except Exception as e:
+        logging.error(f"Exception in start_tcp_uploader: {e}")
 
 def adjustment_of_upload_size_and_uploader_count(total_upload_size):
     global total_upload_size_for_each_ip, uploader_count
