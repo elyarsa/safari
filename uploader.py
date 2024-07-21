@@ -92,18 +92,21 @@ total_uploaded = 0  # Track total uploaded data
 
 def simulate_natural_traffic():
     """Simulate random network traffic patterns"""
-    patterns = ["low", "medium", "high"]
+    patterns = ["browsing", "streaming", "uploading", "idle"]
     pattern = choice(patterns)
     
-    if pattern == "low":
-        duration = randint(5, 15)  # Low traffic period
-        speed_factor = uniform(0.1, 0.5)  # Low speed
-    elif pattern == "medium":
-        duration = randint(10, 30)  # Medium traffic period
-        speed_factor = uniform(0.5, 0.8)  # Medium speed
-    else:  # High
-        duration = randint(20, 40)  # High traffic period
-        speed_factor = uniform(0.8, 1.0)  # High speed
+    if pattern == "browsing":
+        duration = randint(1, 5)  # Browsing period
+        speed_factor = uniform(0.1, 0.3)  # Low speed
+    elif pattern == "streaming":
+        duration = randint(10, 30)  # Streaming period
+        speed_factor = uniform(0.3, 0.6)  # Medium speed
+    elif pattern == "uploading":
+        duration = randint(5, 20)  # Uploading period
+        speed_factor = uniform(0.6, 1.0)  # High speed
+    else:  # Idle
+        duration = randint(5, 10)  # Idle period
+        speed_factor = 0  # No traffic
 
     return duration, speed_factor
 
