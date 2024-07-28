@@ -6,15 +6,11 @@ from time import sleep
 from namizun_core import database
 from namizun_core.log import store_new_upload_agent_log, store_new_tcp_uploader_log
 from namizun_core.time import get_now_time
-import psutil
 
 buffer_ranges = [5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000, 50000, 55000, 60000, 65000]
 total_upload_size_for_each_ip = 0
 uploader_count = 0
 real_ips = []
-
-# Setup logging
-logging.basicConfig(filename='/var/log/namizun.log', level=logging.DEBUG, format='%(asctime)s %(levelname)s:%(message)s')
 
 def load_ips_from_file(file_path):
     global real_ips
@@ -81,25 +77,3 @@ def multi_tcp_uploader(total_upload_size, total_uploader_count, ip_file_path):
         sender_agent.join()
     sleep(randint(1, 5))
     return uploader_count, total_upload_size_for_each_ip
-
-def log_resource_usage():
-    cpu_usage = psutil.cpu_percent()
-    memory_info = psutil.virtual_memory()
-    logging.info(f"CPU Usage: {cpu_usage}%, Memory Usage: {memory_info.percent}%")
-
-def run_uploader(total_upload_size, total_uploader_count, ip_file_path):
-    try:
-        while True:
-            logging.info("Starting a new upload cycle")
-            multi_tcp_uploader(total_upload_size, total_uploader_count, ip_file_path)
-            log_resource_usage()
-            sleep_duration = randint(30, 120)  # Randomized sleep duration between 30 and 120 seconds
-            logging.info(f"Sleeping for {sleep_duration} seconds...")
-            sleep(sleep_duration)
-    except Exception as e:
-        logging.error(f"An error occurred: {e}")
-        sys.exit(1)
-
-# Example usage
-if __name__ == "__main__":
-    run_uploader(total_upload_size=500 * 1024 * 1024, total_uploader_count=50, ip_file_path='/var/www/namizun/else/ips.txt')
