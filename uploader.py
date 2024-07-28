@@ -8,6 +8,7 @@ from namizun_core.udp import multi_tcp_uploader
 from namizun_core.ip import cache_ip_ports_from_database
 from namizun_core.time import get_now_hour
 from namizun_core.log import store_restart_namizun_uploader_log, store_new_upload_loop_log
+import psutil
 
 # Setup logging
 logging.basicConfig(filename='/var/log/namizun.log', level=logging.DEBUG, format='%(asctime)s %(levelname)s:%(message)s')
@@ -28,26 +29,30 @@ ensure_fake_tcp_uploader_running()
 
 def reboot_finder():
     logging.info("Running reboot_finder...")
-    try:
-        new_upload_amount, new_download_amount = get_network_io()
-        cached_download_amount = database.get_cache_parameter('total_download_cache')
-        cached_upload_amount = database.get_cache_parameter('total_upload_cache')
-        logging.info(f"new_upload_amount: {new_upload_amount}, new_download_amount: {new_download_amount}")
-        logging.info(f"cached_download_amount: {cached_download_amount}, cached_upload_amount: {cached_upload_amount}")
-        if new_upload_amount >= cached_upload_amount and new_download_amount >= cached_download_amount:
-            database.set_parameter('total_download_cache', new_download_amount)
-            database.set_parameter('total_upload_cache', new_upload_amount)
-        else:
-            system_upload_amount, system_download_amount = get_system_network_io()
-            database.set_parameter('download_amount_synchronizer', (cached_download_amount - system_download_amount))
-            database.set_parameter('upload_amount_synchronizer', (cached_upload_amount - system_upload_amount))
-            new_upload_amount = cached_upload_amount
-            new_download_amount = cached_download_amount
-        logging.info(f"Updated upload_amount: {new_upload_amount}, download_amount: {new_download_amount}")
-        return new_upload_amount, new_download_amount
-    except Exception as e:
-        logging.error(f"Error in reboot_finder: {e}")
-        sys.exit(1)
+    retries = 3
+    while retries > 0:
+        try:
+            new_upload_amount, new_download_amount = get_network_io()
+            cached_download_amount = database.get_cache_parameter('total_download_cache')
+            cached_upload_amount = database.get_cache_parameter('total_upload_cache')
+            logging.info(f"new_upload_amount: {new_upload_amount}, new_download_amount: {new_download_amount}")
+            logging.info(f"cached_download_amount: {cached_download_amount}, cached_upload_amount: {cached_upload_amount}")
+            if new_upload_amount >= cached_upload_amount and new_download_amount >= cached_download_amount:
+                database.set_parameter('total_download_cache', new_download_amount)
+                database.set_parameter('total_upload_cache', new_upload_amount)
+            else:
+                system_upload_amount, system_download_amount = get_system_network_io()
+                database.set_parameter('download_amount_synchronizer', (cached_download_amount - system_download_amount))
+                database.set_parameter('upload_amount_synchronizer', (cached_upload_amount - system_upload_amount))
+                new_upload_amount = cached_upload_amount
+                new_download_amount = cached_download_amount
+            logging.info(f"Updated upload_amount: {new_upload_amount}, download_amount: {new_download_amount}")
+            return new_upload_amount, new_download_amount
+        except Exception as e:
+            logging.error(f"Error in reboot_finder: {e}, Retries left: {retries}")
+            retries -= 1
+            sleep(randint(1, 5))  # Back-off before retry
+    sys.exit(1)  # Exit after retries are exhausted
 
 def get_network_usage():
     logging.info("Running get_network_usage...")
@@ -81,37 +86,42 @@ def get_uploader_count_base_timeline():
         logging.error(f"Error in get_uploader_count_base_timeline: {e}")
         sys.exit(1)
 
-store_restart_namizun_uploader_log()
-logging.info("Initialized Namizun uploader...")
-
-last_upload_check_time = time()
-upload_check_interval = 60  # Check every 60 seconds
-minimum_upload_activity = 1000  # Minimum bytes to consider as active upload
-
-total_uploaded = 0  # Track total uploaded data
-
 def simulate_natural_traffic():
     """Simulate random network traffic patterns"""
     patterns = ["browsing", "streaming", "uploading", "idle", "file_transfer"]
     pattern = choice(patterns)
     
     if pattern == "browsing":
-        duration = randint(1, 5)  # Browsing period
-        speed_factor = uniform(0.1, 0.3)  # Low speed
+        duration = randint(1, 10)  # Browsing period
+        speed_factor = uniform(0.1, 0.5)  # Low to medium speed
     elif pattern == "streaming":
-        duration = randint(10, 30)  # Streaming period
-        speed_factor = uniform(0.3, 0.6)  # Medium speed
+        duration = randint(10, 60)  # Streaming period
+        speed_factor = uniform(0.3, 0.7)  # Medium to high speed
     elif pattern == "uploading":
-        duration = randint(5, 20)  # Uploading period
-        speed_factor = uniform(0.6, 1.0)  # High speed
+        duration = randint(5, 40)  # Uploading period
+        speed_factor = uniform(0.5, 1.0)  # Medium to high speed
     elif pattern == "file_transfer":
-        duration = randint(10, 60)  # File transfer period
-        speed_factor = uniform(0.5, 1.0)  # High speed
+        duration = randint(10, 120)  # File transfer period
+        speed_factor = uniform(0.4, 1.0)  # Medium to high speed
     else:  # Idle
-        duration = randint(5, 10)  # Idle period
-        speed_factor = 0  # No traffic
+        duration = randint(5, 20)  # Idle period
+        speed_factor = uniform(0, 0.2)  # Very low speed or idle
 
     return duration, speed_factor
+
+def log_resource_usage():
+    cpu_usage = psutil.cpu_percent()
+    memory_info = psutil.virtual_memory()
+    logging.info(f"CPU Usage: {cpu_usage}%, Memory Usage: {memory_info.percent}%")
+
+store_restart_namizun_uploader_log()
+logging.info("Initialized Namizun uploader...")
+
+last_upload_check_time = time()
+upload_check_interval = randint(45, 75)  # Randomize check interval between 45 and 75 seconds
+minimum_upload_activity = 1000  # Minimum bytes to consider as active upload
+
+total_uploaded = 0  # Track total uploaded data
 
 try:
     while True:
@@ -166,12 +176,15 @@ try:
                 sleep(duration)
                 remain_upload_size *= speed_factor
 
-        sleep_duration = randint(5, 30)
+        sleep_duration = randint(3, 60)  # Randomized sleep duration
         logging.info(f"Sleeping for {sleep_duration} seconds...")
         sleep(sleep_duration)
 
         # Log the total uploaded so far
         logging.info(f"Total uploaded so far: {total_uploaded / (1024 * 1024)} MB")
+
+        # Log resource usage
+        log_resource_usage()
 
 except Exception as e:
     logging.error(f"An error occurred: {e}")
