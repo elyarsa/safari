@@ -8,7 +8,20 @@ def get_random_range_ip_from_database():
     return choice(database.get_cache_parameter('range_ips').split('\n'))
 
 
+
+import random
+
+def get_random_ip_from_file():
+    with open('/var/www/namizun/else/ips.txt', 'r') as file:
+        ip_list = [line.strip() for line in file if line.strip()]
+    if ip_list:
+        return random.choice(ip_list)
+    else:
+        raise ValueError("IP list file is empty or not found")
+
 def get_random_ip_from_database():
+    return get_random_ip_from_file()
+
     fragmented_random_ip = get_random_range_ip_from_database().split('.')
     if fragmented_random_ip[0].isdigit() and 0 < int(fragmented_random_ip[0]) < 255 and \
             fragmented_random_ip[1].isdigit() and 0 < int(fragmented_random_ip[1]) < 255 and \
@@ -22,7 +35,7 @@ def get_random_ip_from_database():
 
 
 def get_game_port():
-    return choice([3478, 28960, 27014, 27020, 25565, 27015, 3724, 5000])
+    return 443
 
 
 def cache_ip_ports_from_database():
